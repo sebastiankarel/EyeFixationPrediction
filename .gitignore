@@ -1,0 +1,10 @@
+*
+!.gitignore
+!eye_fixation.py
+!kld.py
+!README.md
+
+!Data/
+!Data/*/
+!Data/*/*/
+!Data/*/*/*
