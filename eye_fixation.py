@@ -2,36 +2,9 @@ import os
 import imageio
 import numpy as np
 import tensorflow as tf
-from kld import KLD
+from skimage.transform import resize
+from kld import kld
 
-
-# function for creating the network which does the job
-def createNetwork():
-    # placeholders for images and fixation maps
-    image = tf.placeholder(tf.float32, (None, 180, 320, 3))
-    fixation_map = tf.placeholder(tf.float32, (None, 180, 320, 1))
-
-    # the feature extraction network
-    conv1_1 = tf.layers.conv2d(image, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv1_2 = tf.layers.conv2d(conv1_1, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    pool1 = tf.layers.max_pooling2d(conv1_2, pool_size=[2, 2], strides=2, padding="same")
-
-    conv2_1 = tf.layers.conv2d(pool1, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv2_2 = tf.layers.conv2d(conv2_1, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    pool2 = tf.layers.max_pooling2d(conv2_2, pool_size=[2, 2], strides=2, padding="same")
-
-    conv3_1 = tf.layers.conv2d(pool2, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv6 = tf.layers.conv2d(conv3_1, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    pool3 = tf.layers.max_pooling2d(conv6, pool_size=[2, 2], strides=1, padding="same")
-
-    conv7 = tf.layers.conv2d(pool3, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv8 = tf.layers.conv2d(conv7, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-
-    multilevel_features = tf.concat([pool2, pool3, conv8], axis=3)
-
-    conv9 = tf.layers.conv2d(multilevel_features, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv10 = tf.layers.conv2d(conv9, filters=1, kernel_size=[1, 1], padding="same", activation=tf.nn.relu)
-    upsampled_output = tf.image.resize_images(conv10, (224, 224), method=tf.image.ResizeMethod.BICUBIC)
 
 # Generator function will output one (image, target) tuple at a time,
 # and shuffle the data for each new epoch
@@ -265,7 +238,7 @@ def create_dataset_from_images(folder):
 
 
 # main function of the system where it starts processing
-def main():
+def main(restore, run_validation):
     # acquire the training images and fixations
     train_data, train_fixations = create_dataset_from_images('Data/train')
     # acquire the validation images and fixations
@@ -309,8 +282,8 @@ def main():
     loss_summary = tf.summary.scalar(name="loss", tensor=loss)
 
     # Number of batches and batch size
-    num_batches = 10000
-    batch_size = 128
+    num_batches = 1000
+    batch_size = 32
 
     # for saving checkpoints
     saver = tf.train.Saver()
@@ -318,20 +291,40 @@ def main():
         writer = tf.summary.FileWriter(logdir="./", graph=sess.graph)
         sess.run(tf.global_variables_initializer())
 
-        gen = data_generator(train_data, train_fixations)
+        if restore:
+            gen = data_generator(train_data, train_fixations)
+            for b in range(num_batches):
+                batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
+                _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
+                                            feed_dict={image: batch_imgs,
+                                                       fixation_map: batch_fixations, is_training: True})
+                writer.add_summary(l, global_step=b)
+                if b % 100 == 0:
+                    print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
 
-        for b in range(num_batches):
-            batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
-            _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
-                                        feed_dict={image: batch_imgs,
-                                                   fixation_map: batch_fixations, is_training: True})
-            writer.add_summary(l, global_step=b)
-            if b % 100 == 0:
-                print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
+            # we could save at end of training, for example
+            save_path = saver.save(sess, "./my-model", global_step=b)
+        else:
+            # restore session
+            saver.restore(sess, "./my-model-999")
 
-        # we could save at end of training, for example
-        save_path = saver.save(sess, "./my-model", global_step=b)
+        predictions = np.zeros((len(validation_data), 180, 320, 3))
+
+        for i in range(len(validation_data)):
+            validation_image = np.zeros((1, 180, 320, 3))
+            validation_image[0] = validation_data[i]
+            saliency_maps = sess.run(predicted_saliency, feed_dict={image: validation_image, is_training: False})
+            #upsampled_saliency = resize(saliency_maps[0], output_shape=(180, 320, 1))
+            predictions[i] = saliency_maps[0]
+            imageio.imwrite("predictions/" + str(i + 1201) + ".jpg", saliency_maps[0])
+
+        if run_validation:
+            sum = 0.0
+            for i in range(len(validation_fixations)):
+                sum += kld(validation_fixations[i], predictions[i])
+            sum = sum / len(validation_fixations)
+            print("Average KL-Divergence is " + str(sum))
 
 
 if __name__ == "__main__":
-    main()
+    main(False, False)
