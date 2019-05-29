@@ -237,8 +237,27 @@ def create_dataset_from_images(folder):
     return data, fixations
 
 
+def find_last_checkpoint_no():
+    file = open("checkpoints/lastCheckpointNo.txt", "r")
+    return int(file.read())
+
+
+def save_last_checkpoint_no(number):
+    file = open("checkpoints/lastCheckpointNo.txt", "w")
+    file.write(str(number))
+
+
+def run_validation(predictions, validation_fixations):
+    sum = 0.0
+    for i in range(len(validation_fixations)):
+        sum += kld(validation_fixations[i], predictions[i])
+    sum = sum / len(validation_fixations)
+    print("Average KL-Divergence is " + str(sum))
+
+
 # main function of the system where it starts processing
-def main(restore, run_validation):
+def main():
+    print(tf.__version__)
     # acquire the training images and fixations
     train_data, train_fixations = create_dataset_from_images('Data/train')
     # acquire the validation images and fixations
@@ -282,31 +301,34 @@ def main(restore, run_validation):
     loss_summary = tf.summary.scalar(name="loss", tensor=loss)
 
     # Number of batches and batch size
-    num_batches = 1000
+    num_batches = 10001
     batch_size = 32
 
     # for saving checkpoints
     saver = tf.train.Saver()
     with tf.Session() as sess:
-        writer = tf.summary.FileWriter(logdir="./", graph=sess.graph)
+        #writer = tf.summary.FileWriter(logdir="./", graph=sess.graph)
         sess.run(tf.global_variables_initializer())
 
-        if restore:
-            gen = data_generator(train_data, train_fixations)
-            for b in range(num_batches):
-                batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
-                _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
-                                            feed_dict={image: batch_imgs,
-                                                       fixation_map: batch_fixations, is_training: True})
-                writer.add_summary(l, global_step=b)
-                if b % 100 == 0:
-                    print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
+        last_checkpoint = find_last_checkpoint_no()
 
-            # we could save at end of training, for example
-            save_path = saver.save(sess, "./my-model", global_step=b)
-        else:
-            # restore session
-            saver.restore(sess, "./my-model-999")
+        # restore session
+        saver.restore(sess, "checkpoints/my-model-" + str(last_checkpoint))
+
+        gen = data_generator(train_data, train_fixations)
+        for b in range(last_checkpoint, num_batches):
+            print('Starting batch {:d}'.format(b))
+            batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
+            _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
+                                        feed_dict={image: batch_imgs,
+                                                   fixation_map: batch_fixations, is_training: True})
+            #writer.add_summary(l, global_step=b)
+            if b % 100 == 0:
+                print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
+
+            if b % 1000 == 0 and b != last_checkpoint:
+                save_path = saver.save(sess, "checkpoints/my-model", global_step=b)
+                save_last_checkpoint_no(b)
 
         predictions = np.zeros((len(validation_data), 180, 320, 3))
 
@@ -318,13 +340,6 @@ def main(restore, run_validation):
             predictions[i] = saliency_maps[0]
             imageio.imwrite("predictions/" + str(i + 1201) + ".jpg", saliency_maps[0])
 
-        if run_validation:
-            sum = 0.0
-            for i in range(len(validation_fixations)):
-                sum += kld(validation_fixations[i], predictions[i])
-            sum = sum / len(validation_fixations)
-            print("Average KL-Divergence is " + str(sum))
-
 
 if __name__ == "__main__":
-    main(False, False)
+    main()

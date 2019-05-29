@@ -8,3 +8,6 @@
 !Data/*/
 !Data/*/*/
 !Data/*/*/*
+
+!checkpoints/
+!checkpoints/*
