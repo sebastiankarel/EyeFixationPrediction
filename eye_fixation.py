@@ -258,6 +258,8 @@ def run_validation(predictions, validation_fixations):
 # main function of the system where it starts processing
 def main():
     print(tf.__version__)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
     # acquire the training images and fixations
     train_data, train_fixations = create_dataset_from_images('Data/train')
     # acquire the validation images and fixations
@@ -302,11 +304,11 @@ def main():
 
     # Number of batches and batch size
     num_batches = 10001
-    batch_size = 32
+    batch_size = 16
 
     # for saving checkpoints
     saver = tf.train.Saver()
-    with tf.Session() as sess:
+    with tf.Session(config=config) as sess:
         #writer = tf.summary.FileWriter(logdir="./", graph=sess.graph)
         sess.run(tf.global_variables_initializer())
 
