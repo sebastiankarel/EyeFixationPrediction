@@ -2,7 +2,6 @@ import os
 import imageio
 import numpy as np
 import tensorflow as tf
-from skimage.transform import resize
 from kld import kld
 
 
@@ -30,7 +29,7 @@ def get_batch_from_generator(gen, batchsize):
     return np.array(batch_imgs), np.array(batch_fixations)
 
 
-def create_network_v2(imgs_normalized, is_training):
+def create_network(imgs_normalized, is_training):
     vgg_weight_file = 'vgg16-conv-weights.npz'
     # Load VGG16 weights from file
     weights = np.load(vgg_weight_file)
@@ -145,89 +144,21 @@ def create_network_v2(imgs_normalized, is_training):
     return tf.image.resize_images(conv_en2, (180, 320), method=tf.image.ResizeMethod.BICUBIC)
 
 
-# function for creating the network which does the job
-def create_network(imgs_normalized, is_training):
-    weights = np.load('vgg16-conv-weights.npz')
-    # the feature extraction network
-    conv1_1 = tf.layers.conv2d(imgs_normalized, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv1_1_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv1_1_b']), trainable=False)
-    conv1_2 = tf.layers.conv2d(conv1_1, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv1_2_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv1_2_b']), trainable=False)
-    pool1 = tf.layers.max_pooling2d(conv1_2, pool_size=[2, 2], strides=2, padding="same")
-
-    conv2_1 = tf.layers.conv2d(pool1, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv2_1_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv2_1_b']),
-                               trainable=False)
-    conv2_2 = tf.layers.conv2d(conv2_1, filters=128, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv2_2_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv2_2_b']),
-                               trainable=False)
-    pool2 = tf.layers.max_pooling2d(conv2_2, pool_size=[2, 2], strides=2, padding="same")
-
-    conv3_1 = tf.layers.conv2d(pool2, filters=256, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv3_1_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv3_1_b']),
-                               trainable=False)
-    conv3_2 = tf.layers.conv2d(conv3_1, filters=256, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv3_2_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv3_2_b']),
-                               trainable=False)
-    conv3_3 = tf.layers.conv2d(conv3_2, filters=256, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv3_3_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv3_3_b']),
-                               trainable=False)
-    pool3 = tf.layers.max_pooling2d(conv3_3, pool_size=[2, 2], strides=2, padding="same")
-
-    conv4_1 = tf.layers.conv2d(pool3, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv4_1_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv4_1_b']),
-                               trainable=False)
-    conv4_2 = tf.layers.conv2d(conv4_1, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv4_2_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv4_2_b']),
-                               trainable=False)
-    conv4_3 = tf.layers.conv2d(conv4_2, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv4_3_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv4_3_b']),
-                               trainable=False)
-    pool4 = tf.layers.max_pooling2d(conv4_3, pool_size=[2, 2], strides=1, padding="same")
-
-    conv5_1 = tf.layers.conv2d(pool4, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv5_1_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv5_1_b']),
-                               trainable=False)
-    conv5_2 = tf.layers.conv2d(conv5_1, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv5_2_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv5_2_b']),
-                               trainable=False)
-    conv5_3 = tf.layers.conv2d(conv5_2, filters=512, kernel_size=[3, 3], padding="same", activation=tf.nn.relu,
-                               kernel_initializer=tf.constant_initializer(weights['conv5_3_W']),
-                               bias_initializer=tf.constant_initializer(weights['conv5_3_b']),
-                               trainable=False)
-
-    concat_features = tf.concat([pool3, pool4, conv5_3], axis=3)
-
-    # encoding network
-    dropout = tf.layers.dropout(concat_features, rate=0.5, training=is_training)
-    conv_en1 = tf.layers.conv2d(dropout, filters=64, kernel_size=[3, 3], padding="same", activation=tf.nn.relu)
-    conv_en2 = tf.layers.conv2d(conv_en1, filters=1, kernel_size=[1, 1], padding="same", activation=tf.nn.relu)
-    return tf.image.resize_images(conv_en2, (180, 320), method=tf.image.ResizeMethod.BICUBIC)
-
-
 # function for creating data-set for training and validation data with their fixations
 def create_dataset_from_images(folder):
     image_folder = os.path.join(folder, 'images')
     fixation_folder = os.path.join(folder, 'fixations')
     data = []
     fixations = []
-    for filename in os.listdir(image_folder):
+    img_files = os.listdir(image_folder)
+    img_files.sort()
+    fix_files = os.listdir(fixation_folder)
+    fix_files.sort()
+    for filename in img_files:
         image = imageio.imread(os.path.join(image_folder, filename))
         if image is not None:
             data.append(image)
-    for filename in os.listdir(fixation_folder):
+    for filename in fix_files:
         fixation = imageio.imread(os.path.join(fixation_folder, filename))
         if fixation is not None:
             fixation = np.expand_dims(fixation, -1)  # adds singleton dimension so fixation size is (180,320,1)
@@ -235,6 +166,18 @@ def create_dataset_from_images(folder):
     data = np.array(data)
     fixations = np.array(fixations)
     return data, fixations
+
+
+def create_test_set(folder):
+    image_folder = os.path.join(folder, 'images')
+    data = []
+    img_files = os.listdir(image_folder)
+    img_files.sort()
+    for filename in img_files:
+        image = imageio.imread(os.path.join(image_folder, filename))
+        if image is not None:
+            data.append(image)
+    return np.array(data)
 
 
 def find_last_checkpoint_no():
@@ -247,16 +190,38 @@ def save_last_checkpoint_no(number):
     file.write(str(number))
 
 
-def run_validation(predictions, validation_fixations):
+def run_validation():
     sum = 0.0
-    for i in range(len(validation_fixations)):
-        sum += kld(validation_fixations[i], predictions[i])
-    sum = sum / len(validation_fixations)
-    print("Average KL-Divergence is " + str(sum))
+    for i in range(1201, 1601):
+        fixation = imageio.imread("Data/val/fixations/{:d}.jpg".format(i))
+        prediction = imageio.imread("predictions/{:d}.jpg".format(i))
+        sum += kld(fixation, prediction)
+    sum = sum / 400
+    print("Average KL-Divergence is {:f}".format(sum))
+
+
+def threshold_image(image):
+    out = np.zeros(image.shape, dtype=np.float32)
+    for i in range(len(image)):
+        for j in range(len(image[0])):
+            if image[i][j] >= 0.0:
+                out[i][j] = image[i][j]
+    return out
+
+
+def create_2d_gaussian():
+    x, y = np.meshgrid(np.linspace(-1, 1, 320), np.linspace(-1, 1, 180))
+    d = np.sqrt(x * x + y * y)
+    sigma, mu = 0.25, 0.0
+    return np.exp(-((d - mu) ** 2 / (2.0 * sigma ** 2)))
+
+
+def weight_image(window, image):
+    return window * image
 
 
 # main function of the system where it starts processing
-def main():
+def main(train, predict_validation, validate, predict_test):
     print(tf.__version__)
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
@@ -277,7 +242,7 @@ def main():
         mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean')
         imgs_normalized = imgs - mean
     # Init network
-    network = create_network_v2(imgs_normalized, is_training)
+    network = create_network(imgs_normalized, is_training)
     # Define loss function
     with tf.name_scope('loss') as scope:
         # normalize saliency
@@ -296,14 +261,14 @@ def main():
                                             weights=weights)
 
         # Optimizer settings from Cornia et al. (2016) [except for decay]
-        optimizer = tf.train.MomentumOptimizer(learning_rate=1e-3, momentum=0.9, use_nesterov=True)
+        optimizer = tf.train.MomentumOptimizer(learning_rate=1e-9, momentum=0.9, use_nesterov=True)
         minimize_op = optimizer.minimize(loss)
 
     # Add a scalar summary for monitoring the loss
     loss_summary = tf.summary.scalar(name="loss", tensor=loss)
 
     # Number of batches and batch size
-    num_batches = 10001
+    num_batches = 65001
     batch_size = 16
 
     # for saving checkpoints
@@ -317,31 +282,47 @@ def main():
         # restore session
         saver.restore(sess, "checkpoints/my-model-" + str(last_checkpoint))
 
-        gen = data_generator(train_data, train_fixations)
-        for b in range(last_checkpoint, num_batches):
-            print('Starting batch {:d}'.format(b))
-            batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
-            _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
-                                        feed_dict={image: batch_imgs,
-                                                   fixation_map: batch_fixations, is_training: True})
-            #writer.add_summary(l, global_step=b)
-            if b % 100 == 0:
-                print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
+        if train:
+            gen = data_generator(train_data, train_fixations)
+            for b in range(last_checkpoint, num_batches):
+                batch_imgs, batch_fixations = get_batch_from_generator(gen, batch_size)
+                _, l, batch_loss = sess.run([minimize_op, loss_summary, loss],
+                                            feed_dict={image: batch_imgs,
+                                                       fixation_map: batch_fixations, is_training: True})
+                #writer.add_summary(l, global_step=b)
+                if b % 100 == 0:
+                    print('Batch {:d} done: batch loss {:f}'.format(b, batch_loss))
 
-            if b % 1000 == 0 and b != last_checkpoint:
+            if b != last_checkpoint:
                 save_path = saver.save(sess, "checkpoints/my-model", global_step=b)
                 save_last_checkpoint_no(b)
 
-        predictions = np.zeros((len(validation_data), 180, 320, 3))
+        if predict_validation:
+            window = create_2d_gaussian()
+            for i in range(len(validation_data)):
+                validation_image = np.zeros((1, 180, 320, 3))
+                validation_image[0] = validation_data[i]
+                saliency_maps = sess.run(predicted_saliency, feed_dict={image: validation_image, is_training: False})
+                img_raw = np.array(saliency_maps[0])
+                img_out = threshold_image(img_raw)  # Values now [0,1]
+                img_out = weight_image(window, np.squeeze(img_out, axis=2))
+                imageio.imwrite("predictions/" + str(i + 1201) + ".jpg", img_out)
 
-        for i in range(len(validation_data)):
-            validation_image = np.zeros((1, 180, 320, 3))
-            validation_image[0] = validation_data[i]
-            saliency_maps = sess.run(predicted_saliency, feed_dict={image: validation_image, is_training: False})
-            #upsampled_saliency = resize(saliency_maps[0], output_shape=(180, 320, 1))
-            predictions[i] = saliency_maps[0]
-            imageio.imwrite("predictions/" + str(i + 1201) + ".jpg", saliency_maps[0])
+        if validate:
+            run_validation()
+
+        if predict_test:
+            test_set = create_test_set("Data/test")
+            window = create_2d_gaussian()
+            for i in range(len(test_set)):
+                test_image = np.zeros((1, 180, 320, 3))
+                test_image[0] = test_set[i]
+                saliency_maps = sess.run(predicted_saliency, feed_dict={image: test_image, is_training: False})
+                img_raw = np.array(saliency_maps[0])
+                img_out = threshold_image(img_raw)  # Values now [0,1]
+                img_out = weight_image(window, np.squeeze(img_out, axis=2))
+                imageio.imwrite("out/" + str(i + 1601) + ".jpg", img_out)
 
 
 if __name__ == "__main__":
-    main()
+    main(False, False, False, True)

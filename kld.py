@@ -20,6 +20,9 @@ def kld(p, g):
 	p_n = softmax(p)
 	g_n = softmax(g)
 
+	p_n = np.nan_to_num(p)
+	g_n = np.nan_to_num(g)
+
 	EPS = 1e-16 # small regularization constant for numerical stability
 	kl = np.sum(g_n * np.log2( EPS + (g_n / (EPS + p_n) ) ))
 

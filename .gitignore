@@ -4,10 +4,10 @@
 !kld.py
 !README.md
 
-!Data/
-!Data/*/
-!Data/*/*/
-!Data/*/*/*
+# !Data/
+# !Data/*/
+# !Data/*/*/
+# !Data/*/*/*
 
 !checkpoints/
 !checkpoints/*
